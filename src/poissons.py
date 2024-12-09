@@ -114,20 +114,120 @@ class HomogeneousPoissonsEquation1D:
         plt.legend()
         plt.show()
 
+
+class PoissonsEquation2D:
+    def __init__(self, params):
+        """
+        Initialize the 2D Poisson's equation problem with interface along x=y.
+        
+        Args:
+        params (dict): Dictionary containing problem parameters.
+        """
+        # Physical parameters
+        self.length = params.get("length", 1.0)
+        self.num_points = params.get("num_points", 101)
+        self.k1 = params.get("k1", 1.0)
+        self.k2 = params.get("k2", 0.2)
+        self.f1 = params.get("f1", 1.0)  # Forcing term in region 1
+        self.f2 = params.get("f2", 0.5)  # Forcing term in region 2
+
+        # Discretization
+        self.dx = self.length / (self.num_points - 1)
+        self.x, self.y = np.meshgrid(
+            np.linspace(0, self.length, self.num_points),
+            np.linspace(0, self.length, self.num_points)
+        )
+        self.interface = self.x >= self.y  # Diagonal interface (x >= y)
+        self.num_grid_points = self.num_points**2  # Total number of grid points
+
+        # Matrix and RHS vector
+        self.A = np.zeros((self.num_grid_points, self.num_grid_points))
+        self.b = np.zeros(self.num_grid_points)
+
+    def _index(self, i, j):
+        """Converts 2D (i, j) index to 1D index for matrix representation."""
+        return i * self.num_points + j
+
+    def setup_matrix(self):
+        """Setup matrix A and vector b."""
+        for i in range(self.num_points):
+            for j in range(self.num_points):
+                idx = self._index(i, j)
+                
+                if i == 0 or j == 0 or i == self.num_points - 1 or j == self.num_points - 1:
+                    # Boundary conditions: u = 0 at the edges
+                    self.A[idx, idx] = 1.0
+                    self.b[idx] = 0.0
+                else:
+                    # Determine region: region 1 (k1, f1) or region 2 (k2, f2)
+                    if self.interface[i, j]:  # Region 1 (above x=y)
+                        k = self.k1
+                        f = self.f1
+                    else:  # Region 2 (below x=y)
+                        k = self.k2
+                        f = self.f2
+
+                    # Poisson equation finite-difference
+                    self.A[idx, self._index(i - 1, j)] = k / self.dx**2  # u(i-1, j)
+                    self.A[idx, self._index(i + 1, j)] = k / self.dx**2  # u(i+1, j)
+                    self.A[idx, self._index(i, j - 1)] = k / self.dx**2  # u(i, j-1)
+                    self.A[idx, self._index(i, j + 1)] = k / self.dx**2  # u(i, j+1)
+                    self.A[idx, idx] = -4 * k / self.dx**2  # u(i, j)
+                    self.b[idx] = -f  # Forcing term
+
+    def solve(self):
+        """Solve the linear system and reshape the solution into 2D."""
+        u_flat = np.linalg.solve(self.A, self.b)
+        return u_flat.reshape((self.num_points, self.num_points))
+
+    def plot_solution(self, u):
+        """Plots the solution."""
+        plt.figure(figsize=(8, 6))
+        plt.contourf(self.x, self.y, u, levels=50, cmap="viridis")
+        plt.colorbar(label="u(x, y)")
+        plt.plot(
+            [0, self.length], [0, self.length], color='red', linestyle='--', label="Interface (x=y)"
+        )
+        plt.xlabel("x")
+        plt.ylabel("y")
+        plt.title("2D Poisson's Equation")
+        plt.legend()
+        plt.grid(False)
+        plt.show()
+
 # Usage
 if __name__ == "__main__":
-    params = {
-        "length": 1.0,     # Length of the domain
-        "k": 1.0,          # Conductivity
-        "source": 1.0,     # Forcing term
-        "num_points": 101  # Number of grid points
-    }
 
-    problem = HomogeneousPoissonsEquation1D(params)
+    #### 2D:
+    params = {
+        "length": 1.0,  # Domain size
+        "num_points": 101,  # Number of points in each dimension
+        "k1": 1.0,  # Conductivity in region 1
+        "k2": 0.25,  # Conductivity in region 2
+        "f1": 0.5,  # Forcing term in region 1
+        "f2": 0.5   # Forcing term in region 2
+    }
+    problem = PoissonsEquation2D(params)
     problem.setup_matrix()
     solution = problem.solve()
     problem.plot_solution(solution)
 
+
+    # #### 1D Homo:
+    # params = {
+    #     "length": 1.0,     # Length of the domain
+    #     "k": 1.0,          # Conductivity
+    #     "source": 1.0,     # Forcing term
+    #     "num_points": 101  # Number of grid points
+    # }
+
+    # problem = HomogeneousPoissonsEquation1D(params)
+    # problem.setup_matrix()
+    # solution = problem.solve()
+    # problem.plot_solution(solution)
+
+
+    # #### 1D Hetero:
     # params = {
     #     "length": 1.0,
     #     "interface": 0.4,
