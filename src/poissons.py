@@ -115,6 +115,7 @@ class HomogeneousPoissonsEquation1D:
         plt.show()
 
 
+
 class PoissonsEquation2D:
     def __init__(self, params):
         """
@@ -190,27 +191,105 @@ class PoissonsEquation2D:
         )
         plt.xlabel("x")
         plt.ylabel("y")
-        plt.title("2D Poisson's Equation")
+        plt.title("Deterministic")
         plt.legend()
         plt.grid(False)
         plt.show()
 
+
+
+
+class PoissonsEquation1D_MultipleInterfaces:
+    def __init__(self, params):
+        """
+        Initialize the problem with given parameters.
+        
+        Args:
+        params (dict): Dictionary containing problem parameters.
+        """
+        # Physical parameters
+        self.length = params.get("length", 1.0)
+        self.interfaces = params.get("interfaces", [0.2, 0.4, 0.6, 0.8])  # Interface locations
+        self.k_values = params.get("k_values", [1.0, 0.5, 0.2, 0.7, 1.2])  # Conductivities in each region
+        self.f_values = params.get("f_values", [0.5, 0.8, 0.3, 0.6, 0.9])  # Forcing terms in each region
+
+        # Discretization
+        self.num_points = params.get("num_points", 101)
+        self.dx = self.length / (self.num_points - 1)
+        self.x = np.linspace(0, self.length, self.num_points)
+
+        # Interface indices
+        self.interface_indices = [np.where(self.x >= interface)[0][0] for interface in self.interfaces]
+        
+        # Matrix and RHS vector
+        self.A = np.zeros((self.num_points, self.num_points))
+        self.b = np.zeros(self.num_points)
+
+    def setup_matrix(self):
+        for i in range(1, self.num_points - 1):
+            region = 0
+            for idx in self.interface_indices:
+                if i < idx:
+                    break
+                region += 1
+            
+            k = self.k_values[region]
+            f = self.f_values[region]
+
+            # Fill in matrix A and RHS vector b
+            self.A[i, i - 1] = k / self.dx**2
+            self.A[i, i] = -2 * k / self.dx**2
+            self.A[i, i + 1] = k / self.dx**2
+            self.b[i] = -f
+
+        # Interface conditions
+        for idx, interface_idx in enumerate(self.interface_indices):
+            k1 = self.k_values[idx]
+            k2 = self.k_values[idx + 1]
+            f1 = self.f_values[idx]
+            f2 = self.f_values[idx + 1]
+
+            self.A[interface_idx, interface_idx - 1] = k1 / self.dx**2
+            self.A[interface_idx, interface_idx] = -k1 / self.dx**2 - k2 / self.dx**2
+            self.A[interface_idx, interface_idx + 1] = k2 / self.dx**2
+            self.b[interface_idx] = -(f1 + f2) / 2
+
+        # Boundary conditions
+        self.A[0, 0] = 1.0  # u=0 at x=0
+        self.A[-1, -1] = 1.0  # u=0 at x=1
+        self.b[0] = 0.0
+        self.b[-1] = 0.0
+
+    def solve(self):
+        return np.linalg.solve(self.A, self.b)
+
+    def plot_solution(self, u):
+        plt.plot(self.x, u, label="Numerical solution")
+        for interface in self.interfaces:
+            plt.axvline(x=interface, color='r', linestyle='--', label="Interface")
+        plt.xlabel("x")
+        plt.ylabel("u(x)")
+        plt.show()
+
+
+
+
 # Usage
 if __name__ == "__main__":
 
-    #### 2D:
-    params = {
-        "length": 1.0,  # Domain size
-        "num_points": 101,  # Number of points in each dimension
-        "k1": 1.0,  # Conductivity in region 1
-        "k2": 0.25,  # Conductivity in region 2
-        "f1": 0.5,  # Forcing term in region 1
-        "f2": 0.5   # Forcing term in region 2
-    }
-    problem = PoissonsEquation2D(params)
-    problem.setup_matrix()
-    solution = problem.solve()
-    problem.plot_solution(solution)
+    # #### 2D:
+    # params = {
+    #     "length": 1.0,  # Domain size
+    #     "num_points": 101,  # Number of points in each dimension
+    #     "k1": 1.0,  # Conductivity in region 1
+    #     "k2": 0.25,  # Conductivity in region 2
+    #     "f1": 0.5,  # Forcing term in region 1
+    #     "f2": 0.5   # Forcing term in region 2
+    # }
+    # problem = PoissonsEquation2D(params)
+    # problem.setup_matrix()
+    # solution = problem.solve()
+    # problem.plot_solution(solution)
 
 
     # #### 1D Homo:
@@ -242,3 +321,17 @@ if __name__ == "__main__":
     # problem.setup_matrix()
     # solution = problem.solve()
     # problem.plot_solution(solution)
+
+    ### 1D multiple interface
+    params = {
+    "length": 1.0,
+    "interfaces": [0.2, 0.4, 0.6, 0.8],
+    "k_values": [1.0, 0.25, 0.9, 0.1, 0.8],
+    "f_values": [1,1,1,1,1],
+    "num_points": 201
+    }
+
+    problem = PoissonsEquation1D_MultipleInterfaces(params)
+    problem.setup_matrix()
+    solution = problem.solve()
+    problem.plot_solution(solution)
